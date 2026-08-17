@@ -92,6 +92,14 @@ function setupUIEventListeners() {
     bindSlider('z-scale', 'modelZScale', applyModelTransforms);
     bindSlider('xy-scale', 'modelXYScale', applyModelTransforms);
     bindSlider('z-pos', 'modelZPos', applyModelTransforms);
+    const halfSliceToggle = document.getElementById('toggle-slice-half');
+    if (halfSliceToggle) {
+        halfSliceToggle.checked = state.sliceHalfCenter;
+        halfSliceToggle.addEventListener('change', (e) => {
+            state.sliceHalfCenter = e.target.checked;
+            applyModelTransforms();
+        });
+    }
 
     document.querySelectorAll('[data-rotate]').forEach((btn) => {
         btn.addEventListener('click', () => rotateInnerModel(btn.dataset.rotate));
