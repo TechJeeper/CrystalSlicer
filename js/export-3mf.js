@@ -22,19 +22,45 @@ function createSlic3rPrintConfig() {
 `;
 }
 
-function createSlic3rModelConfig() {
+function escapeXml(value) {
+    return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&apos;');
+}
+
+function createSlic3rObjectConfig(objectId, mesh, { name, extruder, fillDensity, fillPattern }) {
+    const lastTriangleId = Math.max(0, mesh.triangles.length - 1);
+    return ` <object id="${objectId}" instances_count="1">
+  <metadata type="object" key="name" value="${escapeXml(name)}"/>
+  <metadata type="object" key="extruder" value="${extruder}"/>
+  <volume firstid="0" lastid="${lastTriangleId}">
+   <metadata type="volume" key="name" value="${escapeXml(name)}"/>
+   <metadata type="volume" key="volume_type" value="ModelPart"/>
+   <metadata type="volume" key="extruder" value="${extruder}"/>
+   <metadata type="volume" key="fill_density" value="${fillDensity}"/>
+   <metadata type="volume" key="fill_pattern" value="${fillPattern}"/>
+  </volume>
+ </object>`;
+}
+
+function createSlic3rModelConfig({ blockMesh, innerMesh }) {
     return `<?xml version="1.0" encoding="UTF-8"?>
 <config>
- <object id="2" instances_count="1">
-  <metadata type="object" key="extruder" value="1"/>
-  <metadata type="object" key="fill_density" value="100%"/>
-  <metadata type="object" key="fill_pattern" value="alignedrectilinear"/>
- </object>
- <object id="3" instances_count="1">
-  <metadata type="object" key="extruder" value="2"/>
-  <metadata type="object" key="fill_density" value="15%"/>
-  <metadata type="object" key="fill_pattern" value="rectilinear"/>
- </object>
+${createSlic3rObjectConfig(2, blockMesh, {
+    name: 'Clear PLA Block',
+    extruder: 1,
+    fillDensity: '100%',
+    fillPattern: 'alignedrectilinear'
+})}
+${createSlic3rObjectConfig(3, innerMesh, {
+    name: 'Embedded Model',
+    extruder: 2,
+    fillDensity: '15%',
+    fillPattern: 'rectilinear'
+})}
 </config>`;
 }
 
@@ -46,7 +72,7 @@ export async function build3mfBlob(modelXml, options = {}) {
     if (options.includeSlicerSettings) {
         const metadata = zip.folder('Metadata');
         metadata.file('Slic3r_PE.config', createSlic3rPrintConfig());
-        metadata.file('Slic3r_PE_model.config', createSlic3rModelConfig());
+        metadata.file('Slic3r_PE_model.config', createSlic3rModelConfig(options.slic3rModelConfig));
     }
     const bytes = await zip.generateAsync({
         type: 'uint8array',
@@ -94,8 +120,8 @@ export async function buildCrystalModelXml() {
     }
 
     const resources = `    <basematerials id="1">
-      <base name="Clear PLA" displaycolor="#FFFFFF00"/>
-      <base name="Solid Color PLA" displaycolor="#0000FFFF"/>
+      <base name="Clear PLA" displaycolor="#E2E8F0FF"/>
+      <base name="Solid Color PLA" displaycolor="#2563EBFF"/>
     </basematerials>
     <object id="2" name="Clear PLA Block" type="model" pid="1" pindex="0">
 ${meshTo3mfXml(blockMesh.vertices, blockMesh.triangles)}
@@ -119,6 +145,9 @@ ${meshTo3mfXml(innerMesh.vertices, innerMesh.triangles)}
 
 export async function exportCrystal3MF() {
     const { xml, blockMesh, innerMesh } = await buildCrystalModelXml();
-    const blob = await build3mfBlob(xml, { includeSlicerSettings: true });
+    const blob = await build3mfBlob(xml, {
+        includeSlicerSettings: true,
+        slic3rModelConfig: { blockMesh, innerMesh }
+    });
     return { blob, xml, blockMesh, innerMesh };
 }
