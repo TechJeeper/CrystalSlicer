@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D Crystal Block Slicer & Exporter</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Three.js and JSZip libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <style>
+        body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        input[type="range"] { accent-color: #0f172a; }
+        .tab-content { display: none; }
+        .tab-content.active { display: flex; flex-direction: column; }
+        .desktop-panel { display: none; }
+        @media (min-width: 768px) { .desktop-panel.active { display: flex; flex-direction: column; } }
+    </style>
+</head>
+<body class="flex flex-col h-screen bg-slate-50 text-slate-800">
+
+    <!-- Top Navigation -->
+    <header class="flex-none h-14 md:h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 z-20 shadow-sm">
+        <div class="font-bold text-base md:text-lg text-slate-800 flex items-center gap-2">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-600"><path d="m21 16-9 5-9-5V8l9-5 9 5v8Z"/><path d="m3.27 6.96 8.73 4.85 8.73-4.85"/><path d="M12 21.76V11.81"/></svg>
+            <span class="hidden sm:inline">Clear Print Tools</span>
+            <span class="sm:hidden">CPT</span>
+        </div>
+        <div class="flex gap-1 md:gap-2">
+            <button id="nav-slicer" onclick="switchTab('slicer')" class="px-3 md:px-4 py-1.5 md:py-2 rounded-md text-xs md:text-sm font-medium bg-slate-200 text-slate-800 transition-colors">Crystal Slicer</button>
+            <button id="nav-calib" onclick="switchTab('calib')" class="px-3 md:px-4 py-1.5 md:py-2 rounded-md text-xs md:text-sm font-medium hover:bg-slate-100 text-slate-600 transition-colors">Matrix</button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex flex-col md:flex-row flex-1 overflow-hidden relative">
+
+        <!-- 3D Canvas Area -->
+        <section class="flex-none h-[45vh] md:flex-1 md:h-auto relative order-1 md:order-2 bg-slate-100 z-0 border-b md:border-b-0 border-slate-200">
+            <div id="canvas-container" class="absolute inset-0"></div>
+            
+            <!-- Desktop Slicer Export Panel -->
+            <div id="export-panel-desktop" class="desktop-panel active absolute top-4 right-4 w-72 gap-4 pointer-events-none z-10">
+                <div class="pointer-events-auto bg-white/90 backdrop-blur-md p-5 rounded-2xl shadow-xl border border-white/50">
+                    <h3 class="text-base font-bold text-slate-800 mb-3">Export Assembly</h3>
+                    
+                    <!-- TWO-STEP DOWNLOAD BUTTON (SANDBOX SAFE) -->
+                    <a id="btn-export-slicer-desk" onclick="export3MF(event, 'btn-export-slicer-desk')" href="javascript:void(0)" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold shadow-lg shadow-blue-200 transition-all flex justify-center items-center gap-2 cursor-pointer">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <span>Generate 3MF</span>
+                    </a>
+
+                    <p class="text-[10px] text-center text-slate-500 mt-2">Automatically orients face-down on build plate.</p>
+                </div>
+                <div class="pointer-events-auto bg-slate-800 p-5 rounded-2xl shadow-xl border border-slate-700 text-slate-100">
+                    <h3 class="text-sm font-bold text-white mb-3">Slicer Settings</h3>
+                    <ul class="text-xs space-y-2">
+                        <li><span class="text-green-400 font-bold mr-1">✓</span> Layer Height: <b>0.08mm</b></li>
+                        <li><span class="text-green-400 font-bold mr-1">✓</span> Infill: <b>100% Aligned Rectilinear</b></li>
+                        <li><span class="text-green-400 font-bold mr-1">✓</span> Walls: <b>999 (All walls)</b></li>
+                        <li><span class="text-green-400 font-bold mr-1">✓</span> Print Face Down on smooth plate!</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Desktop Matrix Export Panel -->
+            <div id="calib-export-panel-desktop" class="desktop-panel absolute top-4 right-4 w-72 gap-4 pointer-events-none z-10">
+                <div class="pointer-events-auto bg-white/90 backdrop-blur-md p-5 rounded-2xl shadow-xl border border-white/50">
+                    <h3 class="text-base font-bold text-slate-800 mb-3">Export Calibration</h3>
+                    
+                    <!-- TWO-STEP DOWNLOAD BUTTON (SANDBOX SAFE) -->
+                    <a id="btn-export-calib-desk" onclick="exportCalibration3MF(event, 'btn-export-calib-desk')" href="javascript:void(0)" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-semibold shadow-lg shadow-indigo-200 transition-all flex justify-center items-center gap-2 cursor-pointer">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <span>Generate Matrix</span>
+                    </a>
+                </div>
+                <div class="pointer-events-auto bg-indigo-950 p-5 rounded-2xl shadow-xl border border-indigo-900 text-indigo-100">
+                    <h3 class="text-sm font-bold text-white mb-3">Instructions:</h3>
+                    <ol class="text-xs space-y-2 list-decimal pl-4">
+                        <li>Apply <b>0.08mm</b> layer height & <b>100% Rectilinear</b> infill.</li>
+                        <li>Select each plate individually.</li>
+                        <li>Assign its custom Temp & Flow to match the embossed numbers.</li>
+                    </ol>
+                </div>
+            </div>
+        </section>
+
+        <!-- Settings Sidebar -->
+        <section class="flex-1 md:flex-none md:w-[340px] bg-white overflow-y-auto order-2 md:order-1 border-r border-slate-200 pb-12 md:pb-0">
+            
+            <!-- Slicer Tab -->
+            <div id="tab-slicer" class="tab-content active gap-6 p-5 md:p-6">
+                <div>
+                    <h1 class="text-lg font-bold text-slate-800">Crystal Embedder</h1>
+                    <p class="text-xs text-slate-500 mt-1">Embed 3D models into clear filament blocks.</p>
+                </div>
+
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <label class="block text-sm font-semibold text-slate-700 mb-2">Import Target Model</label>
+                    
+                    <!-- DIRECT CLICK UPLOAD FIX -->
+                    <div class="relative w-full h-10">
+                        <input type="file" id="file-upload" accept=".stl,.obj" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20" />
+                        <div class="absolute inset-0 w-full bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors flex justify-center items-center gap-2 shadow-sm pointer-events-none">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            <span id="upload-btn-text">Upload STL or OBJ</span>
+                        </div>
+                    </div>
+                    
+                </div>
+
+                <div>
+                    <h2 class="text-sm font-semibold text-slate-800 border-b pb-2 mb-4">Model Properties</h2>
+                    <div class="mb-4">
+                        <div class="flex justify-between text-xs mb-1"><span class="text-slate-600">Flattening (Z-Scale)</span><span id="val-z-scale" class="font-mono text-slate-800">1.0x</span></div>
+                        <input type="range" id="slider-z-scale" min="0.05" max="2.0" step="0.05" value="1.0" class="w-full h-2 rounded-lg appearance-none bg-slate-200">
+                    </div>
+                    <div class="mb-4">
+                        <div class="flex justify-between text-xs mb-1"><span class="text-slate-600">Size (X/Y-Scale)</span><span id="val-xy-scale" class="font-mono text-slate-800">1.0x</span></div>
+                        <input type="range" id="slider-xy-scale" min="0.1" max="2.0" step="0.1" value="1.0" class="w-full h-2 rounded-lg appearance-none bg-slate-200">
+                    </div>
+                    <div class="mb-4">
+                        <div class="flex justify-between text-xs mb-1"><span class="text-slate-600">Depth Offset</span><span id="val-z-pos" class="font-mono text-slate-800">0mm</span></div>
+                        <input type="range" id="slider-z-pos" min="-10" max="10" step="0.5" value="0" class="w-full h-2 rounded-lg appearance-none bg-slate-200">
+                    </div>
+                </div>
+
+                <div>
+                    <h2 class="text-sm font-semibold text-slate-800 border-b pb-2 mb-4">Block Dimensions</h2>
+                    <div class="mb-4"><div class="flex justify-between text-xs mb-1"><span class="text-slate-600">Width</span><span id="val-block-w" class="font-mono text-slate-800">50mm</span></div><input type="range" id="slider-block-w" min="20" max="150" step="5" value="50" class="w-full h-2 rounded-lg appearance-none bg-slate-200"></div>
+                    <div class="mb-4"><div class="flex justify-between text-xs mb-1"><span class="text-slate-600">Height</span><span id="val-block-h" class="font-mono text-slate-800">50mm</span></div><input type="range" id="slider-block-h" min="20" max="150" step="5" value="50" class="w-full h-2 rounded-lg appearance-none bg-slate-200"></div>
+                    <div class="mb-4"><div class="flex justify-between text-xs mb-1"><span class="text-slate-600">Thickness</span><span id="val-block-d" class="font-mono text-slate-800">10mm</span></div><input type="range" id="slider-block-d" min="2" max="30" step="1" value="10" class="w-full h-2 rounded-lg appearance-none bg-slate-200"></div>
+                </div>
+
+                <!-- Mobile Only Export Panel -->
+                <div class="md:hidden mt-2 bg-slate-800 p-5 rounded-xl shadow-lg border border-slate-700 text-slate-100">
+                    <a id="btn-export-slicer-mob" onclick="export3MF(event, 'btn-export-slicer-mob')" href="javascript:void(0)" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold shadow-md transition-all flex justify-center items-center gap-2 mb-4">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <span>Generate 3MF</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Calibration Tab -->
+            <div id="tab-calib" class="tab-content gap-6 p-5 md:p-6">
+                <div>
+                    <h1 class="text-lg font-bold text-slate-800">Flow/Temp Matrix</h1>
+                    <p class="text-xs text-slate-500 mt-1">Generate a 6x6 grid of embossed test plates to dial in perfect clarity.</p>
+                </div>
+                <div class="bg-indigo-50 border border-indigo-100 p-3 rounded-lg text-xs text-indigo-800">
+                    <strong>Face-Down Ready:</strong> Text is mirrored and placed on the bottom layer to ensure a glass-like finish on the reading side.
+                </div>
+                <div>
+                    <h2 class="text-sm font-semibold text-slate-800 border-b pb-2 mb-4">Temperature Range (°C)</h2>
+                    <div class="flex gap-4">
+                        <div class="w-1/2">
+                            <label class="block text-xs text-slate-600 mb-1">Minimum</label>
+                            <input type="number" id="cal-min-t" value="230" class="w-full border rounded px-3 py-2 text-sm bg-slate-50">
+                        </div>
+                        <div class="w-1/2">
+                            <label class="block text-xs text-slate-600 mb-1">Maximum</label>
+                            <input type="number" id="cal-max-t" value="280" class="w-full border rounded px-3 py-2 text-sm bg-slate-50">
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <h2 class="text-sm font-semibold text-slate-800 border-b pb-2 mb-4">Max Volumetric Flow (mm³/s)</h2>
+                    <div class="flex gap-4">
+                        <div class="w-1/2">
+                            <label class="block text-xs text-slate-600 mb-1">Minimum</label>
+                            <input type="number" id="cal-min-f" value="2.0" step="0.5" class="w-full border rounded px-3 py-2 text-sm bg-slate-50">
+                        </div>
+                        <div class="w-1/2">
+                            <label class="block text-xs text-slate-600 mb-1">Maximum</label>
+                            <input type="number" id="cal-max-f" value="10.0" step="0.5" class="w-full border rounded px-3 py-2 text-sm bg-slate-50">
+                        </div>
+                    </div>
+                </div>
+                <button onclick="previewCalibrationGrid()" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 py-3 rounded-lg text-sm font-semibold transition-colors">
+                    Update 3D Preview
+                </button>
+                <div class="md:hidden mt-2 bg-indigo-950 p-5 rounded-xl shadow-lg border border-indigo-900 text-indigo-100">
+                    <a id="btn-export-calib-mob" onclick="exportCalibration3MF(event, 'btn-export-calib-mob')" href="javascript:void(0)" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-semibold shadow-md transition-all flex justify-center items-center gap-2 mb-4">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <span>Generate Matrix</span>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // --- GLOBALS & STATE ---
+        let scene, camera, renderer, controls;
+        let crystalBlock, innerModelGroup;
+        let currentMode = 'slicer'; 
+        
+        const state = {
+            blockW: 50, blockH: 50, blockD: 10,
+            modelZScale: 1.0, modelXYScale: 1.0, modelZPos: 0, baseScale: 1.0
+        };
+
+        // --- INITIALIZATION ---
+        function init() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf1f5f9);
+
+            const gridHelper = new THREE.GridHelper(300, 60, 0x000000, 0x000000);
+            gridHelper.material.opacity = 0.08; gridHelper.material.transparent = true; gridHelper.position.y = -30;
+            scene.add(gridHelper);
+
+            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 1, 1000);
+            camera.position.set(60, 60, 100);
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(50, 100, 50); scene.add(dirLight);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; controls.dampingFactor = 0.05;
+
+            innerModelGroup = new THREE.Group(); scene.add(innerModelGroup);
+            createCrystalBlock(); loadProceduralBenchy();
+            window.addEventListener('resize', onWindowResize); setupUIEventListeners(); animate();
+        }
+
+        // --- TABS & UI ---
+        function switchTab(tabId) {
+            currentMode = tabId;
+            document.getElementById('tab-slicer').classList.toggle('active', tabId === 'slicer');
+            document.getElementById('tab-calib').classList.toggle('active', tabId === 'calib');
+            document.getElementById('export-panel-desktop').classList.toggle('active', tabId === 'slicer');
+            document.getElementById('calib-export-panel-desktop').classList.toggle('active', tabId === 'calib');
+            
+            const btnSlicer = document.getElementById('nav-slicer'); const btnCalib = document.getElementById('nav-calib');
+            if (tabId === 'slicer') {
+                btnSlicer.className = "px-3 md:px-4 py-1.5 md:py-2 rounded-md text-xs md:text-sm font-medium bg-slate-200 text-slate-800 transition-colors";
+                btnCalib.className = "px-3 md:px-4 py-1.5 md:py-2 rounded-md text-xs md:text-sm font-medium hover:bg-slate-100 text-slate-600 transition-colors";
+                createCrystalBlock(); if(innerModelGroup.children.length===0) loadProceduralBenchy(); camera.position.set(60, 60, 100);
+            } else {
+                btnCalib.className = "px-3 md:px-4 py-1.5 md:py-2 rounded-md text-xs md:text-sm font-medium bg-slate-200 text-slate-800 transition-colors";
+                btnSlicer.className = "px-3 md:px-4 py-1.5 md:py-2 rounded-md text-xs md:text-sm font-medium hover:bg-slate-100 text-slate-600 transition-colors";
+                previewCalibrationGrid();
+            }
+            controls.target.set(0, 0, 0);
+        }
+
+        // --- 3D LOGIC ---
+        function createCrystalBlock() {
+            if(currentMode !== 'slicer') return;
+            if (crystalBlock) scene.remove(crystalBlock);
+            const geometry = new THREE.BoxGeometry(state.blockW, state.blockH, state.blockD);
+            const material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 0.1, roughness: 0.1, transmission: 0.8, ior: 1.5, thickness: state.blockD, transparent: true, opacity: 1 });
+            crystalBlock = new THREE.Mesh(geometry, material); scene.add(crystalBlock);
+            crystalBlock.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry), new THREE.LineBasicMaterial({ color: 0x94a3b8, opacity: 0.5, transparent: true })));
+        }
+
+        function loadProceduralBenchy() {
+            clearInnerModel();
+            const shape = new THREE.Shape();
+            shape.moveTo(-15, -10); shape.lineTo(15, -10); shape.bezierCurveTo(25, -10, 25, 5, 12, 5); 
+            shape.lineTo(8, 5); shape.lineTo(8, 12); shape.lineTo(-2, 12); shape.lineTo(-2, 5); shape.lineTo(-15, 5); shape.lineTo(-15, -10); 
+            const hole = new THREE.Path();
+            hole.moveTo(-1, 6); hole.lineTo(6, 6); hole.lineTo(6, 10); hole.lineTo(-1, 10); hole.lineTo(-1, 6);
+            shape.holes.push(hole);
+            const geometry = new THREE.ExtrudeGeometry(shape, { depth: 8, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 0.5, bevelThickness: 0.5 });
+            geometry.center(); innerModelGroup.add(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 })));
+            normalizeAndPositionModel();
+        }
+
+        function clearInnerModel() {
+            while(innerModelGroup.children.length > 0){ 
+                const child = innerModelGroup.children[0];
+                if (child.geometry) child.geometry.dispose(); if (child.material) child.material.dispose();
+                innerModelGroup.remove(child); 
+            }
+        }
+
+        function normalizeAndPositionModel() {
+            if(innerModelGroup.children.length === 0) return;
+            const box = new THREE.Box3().setFromObject(innerModelGroup);
+            const size = box.getSize(new THREE.Vector3());
+            state.baseScale = (Math.min(state.blockW, state.blockH) * 0.8) / Math.max(size.x, size.y);
+            applyModelTransforms();
+        }
+
+        function applyModelTransforms() {
+            if(currentMode !== 'slicer') return;
+            const xyScale = state.baseScale * state.modelXYScale;
+            innerModelGroup.scale.set(xyScale, xyScale, state.baseScale * state.modelZScale);
+            innerModelGroup.position.set(0, 0, state.modelZPos);
+        }
+
+        function previewCalibrationGrid() {
+            clearInnerModel(); if (crystalBlock) { scene.remove(crystalBlock); crystalBlock = null; }
+            const plateGeo = new THREE.BoxGeometry(38, 2, 38); const plateMat = new THREE.MeshStandardMaterial({color: 0x93c5fd, transparent: true, opacity: 0.7});
+            const textGeo = new THREE.BoxGeometry(20, 0.6, 20); const textMat = new THREE.MeshStandardMaterial({color: 0x1e3a8a});
+            for(let c=0; c<6; c++) {
+                for(let r=0; r<6; r++) {
+                    const cx = -105 + c * 42; const cy = -105 + r * 42; 
+                    const mesh = new THREE.Mesh(plateGeo, plateMat); mesh.position.set(cx, 1.6, cy); 
+                    const textMock = new THREE.Mesh(textGeo, textMat); textMock.position.set(cx, 0.3, cy); 
+                    innerModelGroup.add(mesh); innerModelGroup.add(textMock);
+                }
+            }
+            camera.position.set(0, -150, 200); controls.target.set(0, 0, 0);
+        }
+
+        function generateVoxelText(text1, text2, plateW, plateH) {
+            const canvas = document.createElement('canvas'); const res = 2; const w = plateW * res; const h = plateH * res;
+            canvas.width = w; canvas.height = h; const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            ctx.fillStyle = 'black'; ctx.fillRect(0,0,w,h);
+            ctx.save(); ctx.translate(w, 0); ctx.scale(-1, 1); ctx.fillStyle = 'white'; ctx.font = 'bold 15px monospace';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text1, w/2, h/2 - 12); ctx.fillText(text2, w/2, h/2 + 12); ctx.restore();
+            const imgData = ctx.getImageData(0,0,w,h).data; const voxels = []; const size = 1/res;
+            for(let y=0; y<h; y++) {
+                for(let x=0; x<w; x++) {
+                    if(imgData[(y*w + x) * 4] > 128) voxels.push({x: (x / res) - (plateW / 2) + (size / 2), y: (plateH / 2) - (y / res) - (size / 2), size: size});
+                }
+            }
+            return voxels;
+        }
+
+        function getCubeXML(x, y, z, w, h, d, vOff) {
+            const x0 = x-w/2; const x1 = x+w/2; const y0 = y-h/2; const y1 = y+h/2; const z0 = z; const z1 = z+d;
+            let v = `<vertex x="${x0.toFixed(3)}" y="${y0.toFixed(3)}" z="${z0.toFixed(3)}"/>\n<vertex x="${x1.toFixed(3)}" y="${y0.toFixed(3)}" z="${z0.toFixed(3)}"/>\n<vertex x="${x1.toFixed(3)}" y="${y1.toFixed(3)}" z="${z0.toFixed(3)}"/>\n<vertex x="${x0.toFixed(3)}" y="${y1.toFixed(3)}" z="${z0.toFixed(3)}"/>\n<vertex x="${x0.toFixed(3)}" y="${y0.toFixed(3)}" z="${z1.toFixed(3)}"/>\n<vertex x="${x1.toFixed(3)}" y="${y0.toFixed(3)}" z="${z1.toFixed(3)}"/>\n<vertex x="${x1.toFixed(3)}" y="${y1.toFixed(3)}" z="${z1.toFixed(3)}"/>\n<vertex x="${x0.toFixed(3)}" y="${y1.toFixed(3)}" z="${z1.toFixed(3)}"/>\n`; 
+            const tArray = [0,2,1,0,3,2,4,5,6,4,6,7,0,1,5,0,5,4,1,2,6,1,6,5,2,3,7,2,7,6,3,0,4,3,4,7]; let t = ``;
+            for(let i=0; i<tArray.length; i+=3) t += `<triangle v1="${tArray[i]+vOff}" v2="${tArray[i+1]+vOff}" v3="${tArray[i+2]+vOff}"/>\n`;
+            return { v, t };
+        }
+
+        function generatePlateXML(temp, flow, cx, cy) {
+            let vXML = []; let tXML = []; let vOff = 0;
+            const addFastCube = (x, y, z, w, h, d) => { const cube = getCubeXML(x, y, z, w, h, d, vOff); vXML.push(cube.v); tXML.push(cube.t); vOff += 8; };
+            const voxels = generateVoxelText(`T:${temp}C`, `F:${flow}`, 40, 40);
+            for(let v of voxels) addFastCube(cx + v.x, cy + v.y, 0, v.size, v.size, 0.6); 
+            addFastCube(cx, cy, 0.6, 40, 40, 2); 
+            return `<mesh>\n<vertices>\n${vXML.join('')}</vertices>\n<triangles>\n${tXML.join('')}</triangles>\n</mesh>`;
+        }
+
+        // --- EVENT LISTENERS ---
+        function setupUIEventListeners() {
+            document.getElementById('file-upload').addEventListener('change', (e) => {
+                const file = e.target.files[0]; if (!file) return;
+                const textSpan = document.getElementById('upload-btn-text'); textSpan.innerText = 'Parsing File...';
+
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    try {
+                        clearInnerModel();
+                        const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+                        if (file.name.toLowerCase().endsWith('.stl')) {
+                            const geom = new THREE.STLLoader().parse(evt.target.result);
+                            geom.computeBoundingBox(); geom.center(); innerModelGroup.add(new THREE.Mesh(geom, mat));
+                        } else {
+                            const obj = new THREE.OBJLoader().parse(evt.target.result);
+                            obj.position.sub(new THREE.Box3().setFromObject(obj).getCenter(new THREE.Vector3()));
+                            obj.traverse((child) => { if (child.isMesh) child.material = mat; });
+                            innerModelGroup.add(obj);
+                        }
+                        normalizeAndPositionModel(); textSpan.innerText = 'Model Loaded! Upload another?';
+                    } catch (err) { alert("Error reading 3D file. Ensure it is a valid STL or OBJ."); textSpan.innerText = 'Upload STL or OBJ'; } 
+                    finally { e.target.value = ''; }
+                };
+                if (file.name.toLowerCase().endsWith('.stl')) reader.readAsArrayBuffer(file); else reader.readAsText(file);
+            });
+            
+            const bindSlider = (id, prop, f) => {
+                document.getElementById(`slider-${id}`).addEventListener('input', (e) => {
+                    state[prop] = parseFloat(e.target.value); document.getElementById(`val-${id}`).innerText = e.target.value + (id.includes('scale') ? 'x' : 'mm'); f();
+                });
+            };
+            bindSlider('block-w', 'blockW', () => { createCrystalBlock(); normalizeAndPositionModel(); });
+            bindSlider('block-h', 'blockH', () => { createCrystalBlock(); normalizeAndPositionModel(); });
+            bindSlider('block-d', 'blockD', createCrystalBlock);
+            bindSlider('z-scale', 'modelZScale', applyModelTransforms); bindSlider('xy-scale', 'modelXYScale', applyModelTransforms); bindSlider('z-pos', 'modelZPos', applyModelTransforms);
+        }
+
+        function onWindowResize() { const c = document.getElementById('canvas-container'); camera.aspect = c.clientWidth / c.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(c.clientWidth, c.clientHeight); }
+        function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
+
+        // --- TWO-STEP DOWNLOAD ARCHITECTURE (SANDBOX BYPASS) ---
+        function resetDownloadButton(btn, text) {
+            btn.removeAttribute('download'); btn.href = "javascript:void(0)";
+            btn.classList.remove('bg-green-600', 'hover:bg-green-700'); btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            if(btn.id.includes('calib')) btn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+            btn.querySelector('span').innerText = text;
+        }
+
+        async function export3MF(e, btnId) {
+            const btn = document.getElementById(btnId);
+            
+            // If already processed, let the default <a> click happen
+            if (btn.hasAttribute('download')) { setTimeout(() => resetDownloadButton(btn, 'Generate 3MF'), 1500); return; }
+            
+            e.preventDefault(); 
+            btn.querySelector('span').innerText = 'Crunching...'; btn.classList.add('opacity-75');
+            await new Promise(r => setTimeout(r, 50)); 
+
+            try {
+                const zip = new JSZip();
+                zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>`);
+                zip.folder("_rels").file(".rels", `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>`);
+
+                const getMesh = (target) => {
+                    let vX = []; let tX = []; let vO = 0;
+                    target.traverse((child) => {
+                        if (child.isMesh) {
+                            child.updateMatrixWorld(); const geom = child.geometry.clone(); geom.applyMatrix4(child.matrixWorld);
+                            geom.applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI));
+                            geom.applyMatrix4(new THREE.Matrix4().makeTranslation(0, 0, state.blockD / 2));
+                            const pos = geom.attributes.position; if(!pos) return;
+                            for(let i=0; i<pos.count; i++) vX.push(`<vertex x="${pos.getX(i).toFixed(4)}" y="${pos.getY(i).toFixed(4)}" z="${pos.getZ(i).toFixed(4)}"/>`);
+                            if (geom.index) { const arr = geom.index.array; for(let i=0; i<arr.length; i+=3) tX.push(`<triangle v1="${arr[i]+vO}" v2="${arr[i+1]+vO}" v3="${arr[i+2]+vO}"/>`); } 
+                            else { for(let i=0; i<pos.count; i+=3) tX.push(`<triangle v1="${i+vO}" v2="${i+1+vO}" v3="${i+2+vO}"/>`); }
+                            vO += pos.count;
+                        }
+                    });
+                    return `<mesh>\n<vertices>\n${vX.join('\n')}\n</vertices>\n<triangles>\n${tX.join('\n')}\n</triangles>\n</mesh>\n`;
+                };
+
+                const modelFile = `<?xml version="1.0" encoding="UTF-8"?>\n<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02">\n  <resources>\n    <m:colorgroup id="1"><m:color color="#FFFFFF33" /><m:color color="#FFFFFFFF" /></m:colorgroup>\n    <object id="2" type="model" pid="1" pindex="0">${getMesh(crystalBlock)}</object>\n    <object id="3" type="model" pid="1" pindex="1">${getMesh(innerModelGroup)}</object>\n    <object id="4" type="model"><components><component objectid="2" transform="1 0 0 0 1 0 0 0 1 0 0 0" /><component objectid="3" transform="1 0 0 0 1 0 0 0 1 0 0 0" /></components></object>\n  </resources>\n  <build><item objectid="4" transform="1 0 0 0 1 0 0 0 1 0 0 0" /></build>\n</model>`;
+                zip.folder("3D").file("3dmodel.model", modelFile);
+                const blob = await zip.generateAsync({type:"blob"});
+                
+                // Transform to real link
+                btn.href = window.URL.createObjectURL(blob); btn.download = 'crystal_block_facedown.3mf';
+                btn.classList.remove('opacity-75', 'bg-blue-600', 'hover:bg-blue-700'); btn.classList.add('bg-green-600', 'hover:bg-green-700');
+                btn.querySelector('span').innerText = 'Ready! Click to Save';
+
+            } catch (err) { alert("Export Error: " + err.message); btn.classList.remove('opacity-75'); btn.querySelector('span').innerText = 'Generate 3MF'; }
+        }
+
+        async function exportCalibration3MF(e, btnId) {
+            const btn = document.getElementById(btnId);
+            if (btn.hasAttribute('download')) { setTimeout(() => resetDownloadButton(btn, 'Generate Matrix'), 1500); return; }
+            
+            e.preventDefault(); btn.querySelector('span').innerText = 'Crunching...'; btn.classList.add('opacity-75');
+            await new Promise(r => setTimeout(r, 100)); 
+
+            try {
+                const zip = new JSZip();
+                zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>`);
+                zip.folder("_rels").file(".rels", `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>`);
+
+                const minT = parseFloat(document.getElementById('cal-min-t').value); const maxT = parseFloat(document.getElementById('cal-max-t').value);
+                const minF = parseFloat(document.getElementById('cal-min-f').value); const maxF = parseFloat(document.getElementById('cal-max-f').value);
+
+                let resXML = `<resources>\n<m:colorgroup id="1"><m:color color="#FFFFFF33" /></m:colorgroup>\n`; let bldXML = `<build>\n`; let objId = 2;
+                for(let c=0; c<6; c++) {
+                    for(let r=0; r<6; r++) {
+                        const temp = Math.round(minT + c * (maxT - minT) / 5); const flow = (minF + r * (maxF - minF) / 5).toFixed(1);
+                        resXML += `<object id="${objId}" type="model" pid="1" pindex="0">\n${generatePlateXML(temp, flow, -105 + c * 42, -105 + r * 42)}\n</object>\n`;
+                        bldXML += `<item objectid="${objId}" transform="1 0 0 0 1 0 0 0 1 0 0 0" />\n`; objId++;
+                    }
+                }
+                const modelFile = `<?xml version="1.0" encoding="UTF-8"?>\n<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02">\n${resXML}</resources>\n${bldXML}</build>\n</model>`;
+                zip.folder("3D").file("3dmodel.model", modelFile);
+                const blob = await zip.generateAsync({type:"blob"});
+                
+                btn.href = window.URL.createObjectURL(blob); btn.download = 'clear_filament_matrix.3mf';
+                btn.classList.remove('opacity-75', 'bg-indigo-600', 'hover:bg-indigo-700'); btn.classList.add('bg-green-600', 'hover:bg-green-700');
+                btn.querySelector('span').innerText = 'Ready! Click to Save';
+
+            } catch (err) { alert("Export Error: " + err.message); btn.classList.remove('opacity-75'); btn.querySelector('span').innerText = 'Generate Matrix'; }
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
+
