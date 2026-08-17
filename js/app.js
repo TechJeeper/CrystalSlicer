@@ -51,7 +51,7 @@ export function switchTab(tabId) {
         btnSlicer.className = idle;
         previewCalibrationGrid();
     }
-    refs.controls.target.set(0, 0, 0);
+    refs.controls?.target.set(0, 0, 0);
 }
 
 function bindSlider(id, prop, onChange) {

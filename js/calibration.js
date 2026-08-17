@@ -100,7 +100,7 @@ export function previewCalibrationGrid() {
         }
     }
     refs.camera.position.set(0, -150, 200);
-    refs.controls.target.set(0, 0, 0);
+    if (refs.controls) refs.controls.target.set(0, 0, 0);
 }
 
 export async function exportCalibration3MF() {

@@ -139,11 +139,15 @@ export function meshBounds(vertices) {
     return bounds;
 }
 
+function fmtCoord(n) {
+    return Math.abs(n) < 5e-5 ? '0' : n.toFixed(4);
+}
+
 export function meshTo3mfXml(vertices, triangles) {
     const vLines = new Array(vertices.length);
     for (let i = 0; i < vertices.length; i++) {
         const v = vertices[i];
-        vLines[i] = `        <vertex x="${v.x.toFixed(4)}" y="${v.y.toFixed(4)}" z="${v.z.toFixed(4)}"/>`;
+        vLines[i] = `        <vertex x="${fmtCoord(v.x)}" y="${fmtCoord(v.y)}" z="${fmtCoord(v.z)}"/>`;
     }
     const tLines = new Array(triangles.length);
     for (let i = 0; i < triangles.length; i++) {

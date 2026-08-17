@@ -37,7 +37,6 @@ export function createCrystalBlock() {
         roughness: 0.1,
         transmission: 0.8,
         ior: 1.5,
-        thickness: state.blockD,
         transparent: true,
         opacity: 1
     });
@@ -192,7 +191,9 @@ export function initScene(container) {
     gridHelper.position.y = -30;
     refs.scene.add(gridHelper);
 
-    refs.camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 1, 1000);
+    const width = container.clientWidth || 800;
+    const height = container.clientHeight || 600;
+    refs.camera = new THREE.PerspectiveCamera(45, width / height, 1, 1000);
     refs.camera.position.set(60, 60, 100);
 
     refs.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -200,15 +201,20 @@ export function initScene(container) {
     dirLight.position.set(50, 100, 50);
     refs.scene.add(dirLight);
 
-    refs.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    refs.renderer.setSize(container.clientWidth, container.clientHeight);
-    refs.renderer.setPixelRatio(window.devicePixelRatio);
-    refs.renderer.localClippingEnabled = true;
-    container.appendChild(refs.renderer.domElement);
-
-    refs.controls = new THREE.OrbitControls(refs.camera, refs.renderer.domElement);
-    refs.controls.enableDamping = true;
-    refs.controls.dampingFactor = 0.05;
+    try {
+        refs.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        refs.renderer.setSize(width, height);
+        refs.renderer.setPixelRatio(window.devicePixelRatio || 1);
+        refs.renderer.localClippingEnabled = true;
+        container.appendChild(refs.renderer.domElement);
+        refs.controls = new THREE.OrbitControls(refs.camera, refs.renderer.domElement);
+        refs.controls.enableDamping = true;
+        refs.controls.dampingFactor = 0.05;
+    } catch (err) {
+        console.warn('WebGL preview unavailable; 3MF export still works.', err);
+        refs.renderer = null;
+        refs.controls = null;
+    }
 
     refs.innerModelGroup = new THREE.Group();
     refs.scene.add(refs.innerModelGroup);
