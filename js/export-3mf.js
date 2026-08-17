@@ -1,6 +1,7 @@
 import { JSZip } from './globals.js';
 import { PRINT_MIME, refs, state } from './state.js';
 import { blockBox, getPrintMatrix, meshTo3mfXml, prepareMeshData } from './geometry.js';
+import { getInnerSlicePlaneZ } from './scene.js';
 
 const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -48,6 +49,12 @@ export async function buildCrystalModelXml() {
     }
     const printMatrix = getPrintMatrix(state.blockD);
     const clipBox = blockBox(state, 0.02);
+    if (state.sliceHalfCenter) {
+        const centerSliceZ = getInnerSlicePlaneZ();
+        if (centerSliceZ !== null) {
+            clipBox.min.z = Math.max(clipBox.min.z, centerSliceZ);
+        }
+    }
 
     const blockMesh = await prepareMeshData(refs.crystalBlock, { printMatrix });
     const innerMesh = await prepareMeshData(refs.innerModelGroup, { printMatrix, clipBox });

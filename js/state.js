@@ -4,6 +4,7 @@ export const state = {
     blockD: 10,
     modelZScale: 1.0,
     modelXYScale: 1.0,
+    sliceHalfCenter: false,
     modelZPos: 0,
     baseScale: 1.0,
     flattenFit: 1.0,

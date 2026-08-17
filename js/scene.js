@@ -15,15 +15,42 @@ function makeClipPlanes() {
     ];
 }
 
-export function updateClipPlanes() {
-    refs.clipPlanes = makeClipPlanes();
+function getInnerWorldBounds() {
+    if (!refs.innerModelGroup || refs.innerModelGroup.children.length === 0) return null;
+    refs.innerModelGroup.updateMatrixWorld(true);
+    return new THREE.Box3().setFromObject(refs.innerModelGroup);
+}
+
+export function getInnerSlicePlaneZ() {
+    if (!state.sliceHalfCenter) return null;
+    const box = getInnerWorldBounds();
+    if (!box) return null;
+    return (box.min.z + box.max.z) / 2;
+}
+
+function buildInnerClipPlanes() {
+    const planes = [...refs.clipPlanes];
+    const centerSliceZ = getInnerSlicePlaneZ();
+    if (centerSliceZ !== null) {
+        planes.push(new THREE.Plane(new THREE.Vector3(0, 0, 1), -centerSliceZ));
+    }
+    return planes;
+}
+
+function updateInnerClipping() {
     if (!refs.innerModelGroup) return;
+    const clippingPlanes = buildInnerClipPlanes();
     refs.innerModelGroup.traverse((child) => {
         if (child.isMesh && child.material) {
-            child.material.clippingPlanes = refs.clipPlanes;
+            child.material.clippingPlanes = clippingPlanes;
             child.material.needsUpdate = true;
         }
     });
+}
+
+export function updateClipPlanes() {
+    refs.clipPlanes = makeClipPlanes();
+    updateInnerClipping();
 }
 
 export function createCrystalBlock() {
@@ -67,7 +94,7 @@ function innerMaterial() {
         color: 0xffffff,
         roughness: 0.45,
         metalness: 0.05,
-        clippingPlanes: refs.clipPlanes,
+        clippingPlanes: buildInnerClipPlanes(),
         clipShadows: true
     });
 }
@@ -98,7 +125,8 @@ export function normalizeAndPositionModel() {
 export function applyModelTransforms() {
     if (refs.currentMode !== 'slicer' || !refs.innerModelGroup) return;
     const xyScale = state.baseScale * state.modelXYScale;
-    const zScale = state.baseScale * state.flattenFit * state.modelZScale;
+    const flattenMultiplier = state.sliceHalfCenter ? 1 : state.flattenFit;
+    const zScale = state.baseScale * flattenMultiplier * state.modelZScale;
     refs.innerModelGroup.scale.set(xyScale, xyScale, zScale);
     refs.innerModelGroup.position.set(0, 0, 0);
     refs.innerModelGroup.updateMatrixWorld(true);
@@ -108,6 +136,7 @@ export function applyModelTransforms() {
     const maxOffset = Math.max(0, (state.blockD - size.z) / 2 - 0.05);
     const z = THREE.MathUtils.clamp(state.modelZPos, -maxOffset, maxOffset);
     refs.innerModelGroup.position.set(0, 0, z);
+    updateInnerClipping();
 }
 
 export function rotateInnerModel(axis) {
